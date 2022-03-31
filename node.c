@@ -38,8 +38,7 @@ struct tsch_link *links_unicast_sf[UNICAST_SLOTFRAME_LENGTH];
 
 // a variable to store the current action number
 uint8_t current_action = 0;
-// variable to strore Tx link of the scheduler
-// struct tsch_link *current_link;
+
 // array to store Q-values of the actions (or timeslots)
 float q_values[UNICAST_SLOTFRAME_LENGTH];
 
@@ -83,22 +82,6 @@ void set_up_new_schedule(uint8_t action)
   }
 }
 
-// function to receive udp packets
-static void rx_packet(struct simple_udp_connection *c,
-                      const uip_ipaddr_t *sender_addr,
-                      uint16_t sender_port,
-                      const uip_ipaddr_t *receiver_addr,
-                      uint16_t receiver_port,
-                      const uint8_t *data,
-                      uint16_t datalen)
-{
-  char received_data[UDP_PLAYLOAD_SIZE];
-  memcpy(received_data, data, datalen);
-  LOG_INFO("Received from ");
-  LOG_INFO_6ADDR(sender_addr);
-  LOG_INFO_("  data: %s\n", data);
-}
-
 // function to populate the payload
 void create_payload()
 {
@@ -106,6 +89,20 @@ void create_payload()
   {
     custom_payload[i] = i % 26 + 'a';
   }
+}
+
+// function to find the highest Q-value
+float max_q_value()
+{
+  float max = q_values[0];
+  for (int i = 1; i < UNICAST_SLOTFRAME_LENGTH; i++)
+  {
+    if (q_values[i] > max)
+    {
+      max = q_values[i];
+    }
+  }
+  return max;
 }
 
 // function to empty the queue and/or print the statistics
@@ -134,6 +131,22 @@ void create_payload()
 // #endif
 //   return emptyQueue(queue);
 // }
+
+// function to receive udp packets
+static void rx_packet(struct simple_udp_connection *c,
+                      const uip_ipaddr_t *sender_addr,
+                      uint16_t sender_port,
+                      const uip_ipaddr_t *receiver_addr,
+                      uint16_t receiver_port,
+                      const uint8_t *data,
+                      uint16_t datalen)
+{
+  char received_data[UDP_PLAYLOAD_SIZE];
+  memcpy(received_data, data, datalen);
+  LOG_INFO("Received from ");
+  LOG_INFO_6ADDR(sender_addr);
+  LOG_INFO_("  data: %s\n", data);
+}
 
 /********** UDP Communication Process - Start ***********/
 PROCESS_THREAD(node_udp_process, ev, data)

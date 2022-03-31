@@ -105,32 +105,27 @@ float max_q_value()
   return max;
 }
 
-// function to empty the queue and/or print the statistics
-// uint8_t empty_schedule_records(uint8_t tx_rx)
-// {
-//   queue_packet_status *queue;
-//   if (tx_rx == 0)
-//   {
-//     queue = func_custom_queue_tx();
-//     LOG_INFO(" Transmission Operations in %d seconds\n", Q_TABLE_INTERVAL);
-//   }
-//   else
-//   {
-//     queue = func_custom_queue_rx();
-//     LOG_INFO(" Receiving Operations in %d seconds\n", Q_TABLE_INTERVAL);
-//   }
-// #if PRINT_TRANSMISSION_RECORDS
-//   for (int i = 0; i < queue->size; i++)
-//   {
-//     LOG_INFO("seqnum:%u trans_count:%u timeslot:%u channel_off:%u\n",
-//              queue->packets[i].packet_seqno,
-//              queue->packets[i].transmission_count,
-//              queue->packets[i].time_slot,
-//              queue->packets[i].channel_offset);
-//   }
-// #endif
-//   return emptyQueue(queue);
-// }
+// link selector function
+int my_callback_packet_ready(void)
+{
+  const uint8_t slotframe = 0;
+  const uint8_t channel_offset = 0;
+  uint8_t timeslot = 0;
+
+  if (packetbuf_hdrlen() == SICSLOWPAN_HC1_HC_UDP_HDR_LEN)
+  {
+    timeslot = current_action;
+    slotframe = 1;
+  }
+
+#if TSCH_WITH_LINK_SELECTOR
+  packetbuf_set_attr(PACKETBUF_ATTR_TSCH_SLOTFRAME, slotframe);
+  packetbuf_set_attr(PACKETBUF_ATTR_TSCH_TIMESLOT, timeslot);
+  packetbuf_set_attr(PACKETBUF_ATTR_TSCH_CHANNEL_OFFSET, channel_offset);
+#endif
+
+  return 1;
+}
 
 // function to receive udp packets
 static void rx_packet(struct simple_udp_connection *c,

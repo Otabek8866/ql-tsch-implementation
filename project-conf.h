@@ -7,8 +7,8 @@
 #endif /* WITH_SECURITY */
 
 /* USB serial takes space, free more space elsewhere */
-// #define SICSLOWPAN_CONF_FRAG 0
-// #define UIP_CONF_BUFFER_SIZE 160
+#define SICSLOWPAN_CONF_FRAG 0
+#define UIP_CONF_BUFFER_SIZE 160
 
 /*******************************************************/
 /******************* Configure TSCH ********************/
@@ -27,6 +27,7 @@
 /* 6TiSCH minimal schedule length */
 #define BROADCAST_SLOTFRAME_LENGTH 7
 #define UNICAST_SLOTFRAME_LENGTH 5
+#define TSCH_SCHEDULE_CONF_DEFAULT_LENGTH 7
 
 // Packet payload size
 // #define PACKETBUF_CONF_SIZE 125 // 128 default
@@ -35,13 +36,14 @@
 #define UDP_PLAYLOAD_SIZE 50
 
 // to list all the packets in the queue and get the total number
-// #define QUEUEBUF_CONF_DEBUG 1
-// #define QUEUEBUF_CONF_STATS 1
+#define QUEUEBUF_CONF_DEBUG 1
+#define QUEUEBUF_CONF_STATS 1
 
 // The 6lowpan "headers" length
 // #define SICSLOWPAN_IPV6_HDR_LEN 1 /*one byte*/
 // #define SICSLOWPAN_HC1_HDR_LEN 3
-// #define SICSLOWPAN_HC1_HC_UDP_HDR_LEN 7
+#define UDP_HEADER_LEN 21
+// #define TSCH_CONF_WITH_SIXTOP 1
 
 // MAX number of re-transmissions
 #define TSCH_CONF_MAX_FRAME_RETRIES 3

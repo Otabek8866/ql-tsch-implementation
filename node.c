@@ -51,7 +51,7 @@ static void init_tsch_schedule(void)
 
   // create a broadcast slotframe and a unicast slotframe
   sf_broadcast = tsch_schedule_add_slotframe(0, BROADCAST_SLOTFRAME_LENGTH);
-  sf_unicast = tsch_schedule_add_slotframe(0, UNICAST_SLOTFRAME_LENGTH);
+  sf_unicast = tsch_schedule_add_slotframe(1, UNICAST_SLOTFRAME_LENGTH);
 
   // shared/advertising cell at (0, 0) --> create a shared/advertising link in the broadcast slotframe
   tsch_schedule_add_link(sf_broadcast, LINK_OPTION_TX | LINK_OPTION_RX | LINK_OPTION_SHARED,
@@ -108,16 +108,17 @@ float max_q_value()
 // link selector function
 int my_callback_packet_ready(void)
 {
-  const uint8_t slotframe = 0;
-  const uint8_t channel_offset = 0;
+  uint8_t slotframe = 0;
+  uint8_t channel_offset = 0;
   uint8_t timeslot = 0;
 
-  if (packetbuf_hdrlen() == SICSLOWPAN_HC1_HC_UDP_HDR_LEN)
+  if (packetbuf_hdrlen() == UDP_HEADER_LEN)
   {
     timeslot = current_action;
     slotframe = 1;
+    LOG_INFO("Current Packet is a UDP packet\n");
   }
-
+  LOG_INFO("Packet header length: %u\n", packetbuf_hdrlen());
 #if TSCH_WITH_LINK_SELECTOR
   packetbuf_set_attr(PACKETBUF_ATTR_TSCH_SLOTFRAME, slotframe);
   packetbuf_set_attr(PACKETBUF_ATTR_TSCH_TIMESLOT, timeslot);
@@ -208,9 +209,9 @@ PROCESS_THREAD(scheduler_process, ev, data)
   PROCESS_BEGIN();
 
   // queue length pointer
-  uint8_t *queue_length;
-  uint8_t buffer_len_before = 0;
-  uint8_t buffer_len_after = 0;
+  // uint8_t *queue_length;
+  // uint8_t buffer_len_before = 0;
+  // uint8_t buffer_len_after = 0;
 
   // lock time-slotting before starting the first schedule
   // while(1) {
@@ -220,40 +221,14 @@ PROCESS_THREAD(scheduler_process, ev, data)
   /* Main Scheduler Loop */
   while (1)
   {
-    // getting the action with the highest q-value and setting upda the schedule
-    uint8_t action = get_highest_q_val();
-    set_up_new_schedule(action);
-
-    // record the buffer size and release the tsch lock
-    buffer_len_before = getCustomBuffLen();
-    // if (tsch_is_locked()) tsch_release_lock();
-    udp_com_stop = 0;
-
     // set the timer to update Q-table
-    etimer_set(&policy_update_timer, Q_TABLE_INTERVAL);
+    etimer_set(&policy_update_timer, UPDATE_POLICY_INTERVAL);
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&policy_update_timer));
-
-    buffer_len_after = getCustomBuffLen();
-    queue_length = getCurrentQueueLen();
-    // didn't work, solve this
-    int buffer_size_global_count = tsch_queue_global_packet_count();
-    LOG_INFO("Current Packet Buffer Size: %u\n", *queue_length);
-    LOG_INFO("Second way Buffer Size: %d\n", buffer_size_global_count);
-    LOG_INFO("Buffer Size 3rd Way: before-%u after-%u\n", buffer_len_before, buffer_len_after);
-    LOG_INFO("Chosen Action: %u\n", action);
 
     // stopping the slot operations
     // while(1) {
     //   if (tsch_get_lock()) break;
     // }
-    udp_com_stop = 1;
-    // calculating the number of trans/receptions
-    uint8_t n_tx_count = empty_schedule_records(0);
-    uint8_t n_rx_count = empty_schedule_records(1);
-
-    // calculate the reward and update the q-table
-    float new_reward = reward(n_tx_count, n_rx_count, buffer_len_before, buffer_len_after);
-    update_q_table(action, new_reward);
   }
   PROCESS_END();
 }

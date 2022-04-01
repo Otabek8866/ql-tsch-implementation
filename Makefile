@@ -7,6 +7,8 @@ CONTIKI=../..
 
 MAKE_MAC = MAKE_MAC_TSCH
 
+# MODULES += os/net/mac/tsch/sixtop
+
 # include $(CONTIKI)/Makefile.dir-variables
 # MODULES += $(CONTIKI_NG_SERVICES_DIR)/shell
 

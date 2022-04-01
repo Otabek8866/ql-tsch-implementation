@@ -27,6 +27,8 @@
 /* 6TiSCH minimal schedule length */
 #define BROADCAST_SLOTFRAME_LENGTH 7
 #define UNICAST_SLOTFRAME_LENGTH 5
+
+// Default slotframe length
 #define TSCH_SCHEDULE_CONF_DEFAULT_LENGTH 7
 
 // Packet payload size

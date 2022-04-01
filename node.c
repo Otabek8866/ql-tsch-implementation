@@ -42,9 +42,27 @@ uint8_t current_action = 0;
 // array to store Q-values of the actions (or timeslots)
 float q_values[UNICAST_SLOTFRAME_LENGTH];
 
+// reward values
+int positive_rewarad = 0;
+int negative_rewarad = -10;
+
+// cycles since the beginning of the first slotframe
+uint16_t cycles_since_start = 0;
+
+// epsilon-greedy probability
+float epsilon_fixed = 0.5;
+
+// Action peeking table to check in which slot there is less communication
+uint8_t action_peeking_table[UNICAST_SLOTFRAME_LENGTH];
+
+// Q-learning parameters
+float learning_rate = 0.1;
+float discount_factor = 0.9;
+
 /********** Scheduler Setup ***********/
 // Function starts Minimal Shceduler
-static void init_tsch_schedule(void)
+static void
+init_tsch_schedule(void)
 {
   // delete all the slotframes
   tsch_schedule_remove_all_slotframes();
@@ -57,9 +75,18 @@ static void init_tsch_schedule(void)
   tsch_schedule_add_link(sf_broadcast, LINK_OPTION_TX | LINK_OPTION_RX | LINK_OPTION_SHARED,
                          LINK_TYPE_ADVERTISING, &tsch_broadcast_address, 0, 0, 1);
 
-  // create one Tx link in the fisrt slot of the unicast slotframe
-  links_unicast_sf[0] = tsch_schedule_add_link(sf_unicast, LINK_OPTION_TX | LINK_OPTION_SHARED,
-                                               LINK_TYPE_NORMAL, &tsch_broadcast_address, 0, 0, 1);
+  // create one Tx link in the fisrt slot of the unicast slotframe (if this is a simple node, otherwise it will be Rx link)
+  if (node_id == 1)
+  {
+    links_unicast_sf[0] = tsch_schedule_add_link(sf_unicast, LINK_OPTION_RX | LINK_OPTION_SHARED,
+                                                 LINK_TYPE_NORMAL, &tsch_broadcast_address, 0, 0, 1);
+  }
+  else
+  {
+    links_unicast_sf[0] = tsch_schedule_add_link(sf_unicast, LINK_OPTION_TX | LINK_OPTION_SHARED,
+                                                 LINK_TYPE_NORMAL, &tsch_broadcast_address, 0, 0, 1);
+  }
+
   current_action = 0;
   // create multiple Rx links in the rest of the unicast slotframe
   for (int i = 1; i < UNICAST_SLOTFRAME_LENGTH; i++)
@@ -128,14 +155,20 @@ int my_callback_packet_ready(void)
   return 1;
 }
 
+// dynamic epsilon calculation function
+float calculate_new_epsilon()
+{
+  float epsilon_new = (10000.0 / (float)cycles_since_start);
+  if (epsilon_new < epsilon_fixed)
+    return epsilon_new;
+  else
+    return epsilon_fixed;
+}
+
 // function to receive udp packets
-static void rx_packet(struct simple_udp_connection *c,
-                      const uip_ipaddr_t *sender_addr,
-                      uint16_t sender_port,
-                      const uip_ipaddr_t *receiver_addr,
-                      uint16_t receiver_port,
-                      const uint8_t *data,
-                      uint16_t datalen)
+static void rx_packet(struct simple_udp_connection *c, const uip_ipaddr_t *sender_addr,
+                      uint16_t sender_port, const uip_ipaddr_t *receiver_addr,
+                      uint16_t receiver_port, const uint8_t *data, uint16_t datalen)
 {
   char received_data[UDP_PLAYLOAD_SIZE];
   memcpy(received_data, data, datalen);
@@ -207,11 +240,11 @@ PROCESS_THREAD(scheduler_process, ev, data)
   static struct etimer policy_update_timer;
 
   PROCESS_BEGIN();
-
-  // queue length pointer
-  // uint8_t *queue_length;
-  // uint8_t buffer_len_before = 0;
-  // uint8_t buffer_len_after = 0;
+  for (int i = 0; i < UNICAST_SLOTFRAME_LENGTH; i++)
+  {
+    LOG_INFO("APT value is %u\n", action_peer_table[i]);
+    LOG_INFO("Q value is %f\n", q_values[i]);
+  }
 
   // lock time-slotting before starting the first schedule
   // while(1) {

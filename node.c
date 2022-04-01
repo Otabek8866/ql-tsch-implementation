@@ -4,7 +4,9 @@
 #include "net/mac/tsch/tsch.h"
 #include "lib/random.h"
 #include "sys/node-id.h"
-// #include "net/queuebuf.h"
+
+#include "net/mac/tsch/tsch-slot-operation.h"
+#include "net/mac/tsch/tsch-queue.h"
 
 #include "sys/log.h"
 #define LOG_MODULE "App"
@@ -14,10 +16,10 @@
 #define UDP_PORT 8765
 
 // period to send a packet to the udp server
-#define SEND_INTERVAL (60 * CLOCK_SECOND)
+#define SEND_INTERVAL (PACKET_SENDING_INTERVAL * CLOCK_SECOND)
 
 // period to update the policy
-#define UPDATE_POLICY_INTERVAL (1 * CLOCK_SECOND)
+#define UPDATE_POLICY_INTERVAL (CLOCK_SECOND * (UNICAST_SLOTFRAME_LENGTH + BROADCAST_SLOTFRAME_LENGTH) / 100)
 
 // UDP communication process
 PROCESS(node_udp_process, "UDP communicatio process");
@@ -43,26 +45,25 @@ uint8_t current_action = 0;
 float q_values[UNICAST_SLOTFRAME_LENGTH];
 
 // reward values
-int positive_rewarad = 0;
-int negative_rewarad = -10;
+int reward_succes = 0;
+int reward_failure = -1;
 
 // cycles since the beginning of the first slotframe
 uint16_t cycles_since_start = 0;
+uint8_t schedule_setup = 0;
 
 // epsilon-greedy probability
 float epsilon_fixed = 0.5;
 
 // Action peeking table to check in which slot there is less communication
-uint8_t action_peeking_table[UNICAST_SLOTFRAME_LENGTH];
+// uint8_t action_peeking_table[UNICAST_SLOTFRAME_LENGTH];
 
 // Q-learning parameters
 float learning_rate = 0.1;
-float discount_factor = 0.9;
+float discount_factor = 0.95;
 
-/********** Scheduler Setup ***********/
-// Function starts Minimal Shceduler
-static void
-init_tsch_schedule(void)
+// Set up the initial schedule
+static void init_tsch_schedule(void)
 {
   // delete all the slotframes
   tsch_schedule_remove_all_slotframes();
@@ -76,18 +77,9 @@ init_tsch_schedule(void)
                          LINK_TYPE_ADVERTISING, &tsch_broadcast_address, 0, 0, 1);
 
   // create one Tx link in the fisrt slot of the unicast slotframe (if this is a simple node, otherwise it will be Rx link)
-  if (node_id == 1)
-  {
-    links_unicast_sf[0] = tsch_schedule_add_link(sf_unicast, LINK_OPTION_RX | LINK_OPTION_SHARED,
-                                                 LINK_TYPE_NORMAL, &tsch_broadcast_address, 0, 0, 1);
-  }
-  else
-  {
-    links_unicast_sf[0] = tsch_schedule_add_link(sf_unicast, LINK_OPTION_TX | LINK_OPTION_SHARED,
-                                                 LINK_TYPE_NORMAL, &tsch_broadcast_address, 0, 0, 1);
-  }
+  links_unicast_sf[0] = tsch_schedule_add_link(sf_unicast, LINK_OPTION_TX | LINK_OPTION_SHARED,
+                                                LINK_TYPE_NORMAL, &tsch_broadcast_address, 0, 0, 1);
 
-  current_action = 0;
   // create multiple Rx links in the rest of the unicast slotframe
   for (int i = 1; i < UNICAST_SLOTFRAME_LENGTH; i++)
   {
@@ -98,7 +90,7 @@ init_tsch_schedule(void)
 
 // set up new schedule based on the chosen action
 void set_up_new_schedule(uint8_t action)
-{
+{ 
   if (action != current_action)
   {
     links_unicast_sf[action] = tsch_schedule_add_link(sf_unicast, LINK_OPTION_TX | LINK_OPTION_SHARED,
@@ -118,23 +110,61 @@ void create_payload()
   }
 }
 
-// function to find the highest Q-value
-float max_q_value()
+// initialize q-values randomly or set all to 0
+void initialize_q_values(uint8_t val)
 {
-  float max = q_values[0];
-  for (int i = 1; i < UNICAST_SLOTFRAME_LENGTH; i++)
+  if (val){
+    for (uint8_t i = 0; i < UNICAST_SLOTFRAME_LENGTH; i++){
+      q_values[i] = (float) random_rand()/RANDOM_RAND_MAX;
+    }
+  } else {
+    for (uint8_t i = 0; i < UNICAST_SLOTFRAME_LENGTH; i++){
+      q_values[i] = 0;
+    }
+  }
+}
+
+// choose exploration/explotation ==> 1/0 (gradient-greedy function)
+uint8_t policy_check()
+{ 
+  float num = (float) random_rand()/RANDOM_RAND_MAX;
+  float epsilon_new = (10000.0 / (float)cycles_since_start);
+  if (epsilon_new > epsilon_fixed) epsilon_new = epsilon_fixed;
+  
+  if (num < epsilon_new)
+      return 1;
+  else
+      return 0;  
+}
+
+// function to find the highest Q-value and return its index
+uint8_t max_q_value_index()
+{
+  uint8_t max = random_rand()%UNICAST_SLOTFRAME_LENGTH;
+  for (uint8_t i = 1; i < UNICAST_SLOTFRAME_LENGTH; i++)
   {
-    if (q_values[i] > max)
+    if (q_values[i] > q_values[max])
     {
-      max = q_values[i];
+      max = i;
     }
   }
   return max;
 }
 
+// Update q-value table function
+void update_q_table(uint8_t action, int reward)
+{ 
+  uint8_t max = max_q_value_index();
+  float expected_max_q_value = q_values[max] + reward_succes;
+  q_values[action] = (1 - learning_rate) * q_values[action] + 
+                      learning_rate * (reward + discount_factor * expected_max_q_value -
+                      q_values[action]);
+}
+
 // link selector function
 int my_callback_packet_ready(void)
 {
+#if TSCH_CONF_WITH_LINK_SELECTOR
   uint8_t slotframe = 0;
   uint8_t channel_offset = 0;
   uint8_t timeslot = 0;
@@ -150,20 +180,25 @@ int my_callback_packet_ready(void)
   packetbuf_set_attr(PACKETBUF_ATTR_TSCH_SLOTFRAME, slotframe);
   packetbuf_set_attr(PACKETBUF_ATTR_TSCH_TIMESLOT, timeslot);
   packetbuf_set_attr(PACKETBUF_ATTR_TSCH_CHANNEL_OFFSET, channel_offset);
-#endif
-
+#endif /* TSCH_WITH_LINK_SELECTOR */
+#endif /* TSCH_CONF_WITH_LINK_SELECTOR */
   return 1;
 }
 
-// dynamic epsilon calculation function
-float calculate_new_epsilon()
-{
-  float epsilon_new = (10000.0 / (float)cycles_since_start);
-  if (epsilon_new < epsilon_fixed)
-    return epsilon_new;
-  else
-    return epsilon_fixed;
-}
+//  Reset all the backoff times 
+// void reset_all_backoff_times(void)
+// {
+//   /* check if tsch is locked */
+//   if(!tsch_is_locked()) {
+//     struct tsch_neighbor *n = list_head(neighbor_list);
+//     while(n != NULL) {
+//       struct tsch_neighbor *next_n = list_item_next(n);
+//       /* Reset backoff exponent */
+//       tsch_queue_backoff_reset(n);
+//       n = next_n;
+//     }
+//   }
+// }
 
 // function to receive udp packets
 static void rx_packet(struct simple_udp_connection *c, const uip_ipaddr_t *sender_addr,
@@ -188,12 +223,19 @@ PROCESS_THREAD(node_udp_process, ev, data)
 
   PROCESS_BEGIN();
 
-  // creating the payload and starting the scheduler
+  // set values of APT table to 0s
+  reset_apt_table();
+  // creating the payload
   create_payload();
+  // initialize q-values
+  initialize_q_values(0);
+  // set up the initial schedule
   init_tsch_schedule();
-  LOG_INFO("Payload %s\n", custom_payload);
+  
+  //------------------------
   // NETSTACK_RADIO.off()
   // NETSTACK_MAC.off()
+  //------------------------
 
   /* Initialization; `rx_packet` is the function for packet reception */
   simple_udp_register(&udp_conn, UDP_PORT, NULL, UDP_PORT, rx_packet);
@@ -205,17 +247,41 @@ PROCESS_THREAD(node_udp_process, ev, data)
   // Initialize the mac layer
   NETSTACK_MAC.on();
 
-  LOG_INFO("Finished setting up.......\n");
+  // start QL-TSCH protocol
+  schedule_setup = 1;
 
   // if this is a simple node, start sending upd packets
   if (node_id != 1)
   {
     LOG_INFO("Started UDP communication\n");
+
     // start the timer for periodic udp packet sending
     etimer_set(&periodic_timer, SEND_INTERVAL);
+    
     /* Main UDP comm Loop */
     while (1)
     {
+      // print the Q-values
+      LOG_INFO("Q-Values:");
+      for (uint8_t i = 0; i < UNICAST_SLOTFRAME_LENGTH; i++){
+        LOG_INFO_(" %u->%f", i, q_values[i]);
+      }
+      LOG_INFO_("\n");
+
+      // print APT table values
+      LOG_INFO("APT-Values:");
+      uint8_t *table = get_apt_table();
+      for (uint8_t i = 0; i < UNICAST_SLOTFRAME_LENGTH; i++){
+        LOG_INFO_(" %u->%u", i, table[i]);
+      }
+      LOG_INFO_("\n");
+      LOG_INFO("Total frame cycles: %u\n", cycles_since_start);
+
+      // reset all the backoff windows for all the neighbours
+      //custom_reset_all_backoff_exponents();
+      // reset APT-table values
+      reset_apt_table();
+
       PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
       if (NETSTACK_ROUTING.node_is_reachable() && NETSTACK_ROUTING.get_root_ipaddr(&dst))
       {
@@ -223,7 +289,7 @@ PROCESS_THREAD(node_udp_process, ev, data)
         seqnum++;
         LOG_INFO("Send to ");
         LOG_INFO_6ADDR(&dst);
-        LOG_INFO_(", application packet number %" PRIu32 "\n", seqnum);
+        LOG_INFO_(", Packet Number %" PRIu32 "\n", seqnum);
         simple_udp_sendto(&udp_conn, &custom_payload, sizeof(custom_payload), &dst);
       }
       etimer_set(&periodic_timer, SEND_INTERVAL);
@@ -238,30 +304,55 @@ PROCESS_THREAD(scheduler_process, ev, data)
 {
   // timer to update the policy
   static struct etimer policy_update_timer;
-
+  
   PROCESS_BEGIN();
-  for (int i = 0; i < UNICAST_SLOTFRAME_LENGTH; i++)
-  {
-    LOG_INFO("APT value is %u\n", action_peer_table[i]);
-    LOG_INFO("Q value is %f\n", q_values[i]);
-  }
-
-  // lock time-slotting before starting the first schedule
-  // while(1) {
-  //     if (tsch_get_lock()) break;
-  // }
+  
+  // wait untill the initial setupt finishes
+  while(1) if(schedule_setup) break;
+  
+  // set the timer for one whole frame cycle 
+  etimer_set(&policy_update_timer, UPDATE_POLICY_INTERVAL);
 
   /* Main Scheduler Loop */
   while (1)
-  {
-    // set the timer to update Q-table
-    etimer_set(&policy_update_timer, UPDATE_POLICY_INTERVAL);
+  { 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&policy_update_timer));
 
-    // stopping the slot operations
-    // while(1) {
-    //   if (tsch_get_lock()) break;
-    // }
+    // lock time-slotting before starting the first schedule
+    // while(1) if (tsch_get_lock() == 1) break;
+    // LOG_INFO("TSCH got locked -> WARNING !!!\n");
+
+    /**********  Q-value update calculations - Start **********/
+    
+    // updating the q-table based on the last action results
+    uint8_t transmission_status = get_and_reset_Tx_slot_status();
+    if (transmission_status){
+      if (transmission_status == 1){
+        update_q_table(current_action, reward_succes);
+      } else {
+        update_q_table(current_action, reward_failure);
+      }
+    }
+    // LOG_INFO("Transmission status: %u\n", transmission_status);
+    
+    // choosing exploration/exploatation and updating the schedule
+    uint8_t action;
+    if (policy_check() == 1){ /* Exploration */
+      action = get_slot_with_apt_table_min_value();
+      // LOG_INFO("Exploartion is selected. Action is %u\n", action);
+    } else { /* Explotation */
+      action = max_q_value_index();
+      // LOG_INFO("Explotation is selected. Action is %u\n", action);
+    }
+    set_up_new_schedule(action);
+    current_action = action;
+    cycles_since_start++;
+
+    /**********  Q-value update calculations - End **********/
+
+    // start the slot operations again and set the timer
+    // tsch_release_lock();
+    etimer_set(&policy_update_timer, UPDATE_POLICY_INTERVAL);
   }
   PROCESS_END();
 }

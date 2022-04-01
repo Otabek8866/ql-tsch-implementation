@@ -7,9 +7,7 @@ void ch(float *arr)
 
 int main()
 {
-    int a[3];
-    // ch(&a);
-    printf("%u\n", a[0]);
-    printf("%u\n", a[1]);
-    printf("%u\n", a[2]);
+    float a[10];
+    for (int i = 0; i < 10; i++)
+        printf("%f ", a[i]);
 }

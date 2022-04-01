@@ -1,0 +1,17 @@
+ /* Flush all neighbor queues */
+  362 void
+  363 tsch_queue_reset(void)
+  364 {
+  365   /* Deallocate unneeded neighbors */
+  366   if(!tsch_is_locked()) {
+  367     struct tsch_neighbor *n = list_head(neighbor_list);
+  368     while(n != NULL) {
+  369       struct tsch_neighbor *next_n = list_item_next(n);
+  370       /* Flush queue */
+  371       tsch_queue_flush_nbr_queue(n);
+  372       /* Reset backoff exponent */
+  373       tsch_queue_backoff_reset(n);
+  374       n = next_n;
+  375     }
+  376   }
+  377 }

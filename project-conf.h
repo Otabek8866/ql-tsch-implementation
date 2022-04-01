@@ -24,28 +24,18 @@
 // you can use this funtion to finish initialization
 #define TSCH_CONF_AUTOSTART 0
 
-/* 6TiSCH minimal schedule length */
+/* Length of slotframes */
 #define BROADCAST_SLOTFRAME_LENGTH 7
 #define UNICAST_SLOTFRAME_LENGTH 5
 
-// Default slotframe length
-#define TSCH_SCHEDULE_CONF_DEFAULT_LENGTH 7
-
-// Packet payload size
-// #define PACKETBUF_CONF_SIZE 125 // 128 default
+// UDP packet sending interval in seconds
+#define PACKET_SENDING_INTERVAL 30
 
 // UDP packet payload size
 #define UDP_PLAYLOAD_SIZE 50
 
-// to list all the packets in the queue and get the total number
-#define QUEUEBUF_CONF_DEBUG 1
-#define QUEUEBUF_CONF_STATS 1
-
-// The 6lowpan "headers" length
-// #define SICSLOWPAN_IPV6_HDR_LEN 1 /*one byte*/
-// #define SICSLOWPAN_HC1_HDR_LEN 3
+// expected header lenght of a UDP packet from Application layer
 #define UDP_HEADER_LEN 21
-// #define TSCH_CONF_WITH_SIXTOP 1
 
 // MAX number of re-transmissions
 #define TSCH_CONF_MAX_FRAME_RETRIES 3
@@ -54,8 +44,24 @@
 #define TSCH_CONF_DEFAULT_HOPPING_SEQUENCE TSCH_HOPPING_SEQUENCE_2_2
 
 // define a link selector function
-#define TSCH_CONF_WITH_LINK_SELECTOR 1
+#define TSCH_CONF_WITH_LINK_SELECTOR 0
 #define TSCH_CALLBACK_PACKET_READY my_callback_packet_ready
+
+// macros to enbale QL-TSCH in tsch libriaries
+#define QL_TSCH_ENABLED_CONF 1
+
+// Default slotframe length
+// #define TSCH_SCHEDULE_CONF_DEFAULT_LENGTH 7
+
+// Packet payload size
+// #define PACKETBUF_CONF_SIZE 125 // 128 default
+
+// to list all the packets in the queue and get the total number
+// #define QUEUEBUF_CONF_DEBUG 1
+// #define QUEUEBUF_CONF_STATS 1
+
+// The 6lowpan "headers" length
+// #define TSCH_CONF_WITH_SIXTOP 1
 
 /*******************************************************/
 #if WITH_SECURITY

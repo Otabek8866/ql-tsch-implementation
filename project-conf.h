@@ -26,7 +26,7 @@
 
 /* Length of slotframes */
 #define BROADCAST_SLOTFRAME_LENGTH 7
-#define UNICAST_SLOTFRAME_LENGTH 5
+#define UNICAST_SLOTFRAME_LENGTH 15
 
 // UDP packet sending interval in seconds
 #define PACKET_SENDING_INTERVAL 30
@@ -49,6 +49,15 @@
 
 // macros to enbale QL-TSCH in tsch libriaries
 #define QL_TSCH_ENABLED_CONF 1
+
+// Run algorithm with tsch locking
+#define WITH_TSCH_LOCKING 1
+
+// drift compensation time when tsch locking is used in milliseconds
+#define EXTRA_TIME 78
+
+// define an interval policy update time, for testing
+#define UPDATE_POLICY_INTERVAL_CONF 0
 
 // Default slotframe length
 // #define TSCH_SCHEDULE_CONF_DEFAULT_LENGTH 7

@@ -855,8 +855,8 @@ PT_THREAD(tsch_tx_slot(struct pt *pt, struct rtimer *t))
     if (mac_tx_status == MAC_TX_OK)
     {
       trans_status = 1;
-    } else if (mac_tx_status == MAC_TX_COLLISION || mac_tx_status == MAC_TX_NOACK ||
-              mac_tx_status == MAC_TX_ERR_FATAL || mac_tx_status == MAC_TX_ERR)
+    } else /*if (mac_tx_status == MAC_TX_COLLISION || mac_tx_status == MAC_TX_NOACK ||
+              mac_tx_status == MAC_TX_ERR_FATAL || mac_tx_status == MAC_TX_ERR) */
     {
       trans_status = 2;
     }

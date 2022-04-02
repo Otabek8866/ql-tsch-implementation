@@ -19,7 +19,11 @@
 #define SEND_INTERVAL (PACKET_SENDING_INTERVAL * CLOCK_SECOND)
 
 // period to update the policy
-#define UPDATE_POLICY_INTERVAL (CLOCK_SECOND * (UNICAST_SLOTFRAME_LENGTH + BROADCAST_SLOTFRAME_LENGTH) / 100)
+#if UPDATE_POLICY_INTERVAL_CONF == 0
+#define UPDATE_POLICY_INTERVAL (CLOCK_SECOND * (EXTRA_TIME + UNICAST_SLOTFRAME_LENGTH + BROADCAST_SLOTFRAME_LENGTH) / 100)
+#else
+#define UPDATE_POLICY_INTERVAL UPDATE_POLICY_INTERVAL_CONF
+#endif
 
 // UDP communication process
 PROCESS(node_udp_process, "UDP communicatio process");
@@ -55,9 +59,6 @@ uint8_t schedule_setup = 0;
 // epsilon-greedy probability
 float epsilon_fixed = 0.5;
 
-// Action peeking table to check in which slot there is less communication
-// uint8_t action_peeking_table[UNICAST_SLOTFRAME_LENGTH];
-
 // Q-learning parameters
 float learning_rate = 0.1;
 float discount_factor = 0.95;
@@ -74,17 +75,17 @@ static void init_tsch_schedule(void)
 
   // shared/advertising cell at (0, 0) --> create a shared/advertising link in the broadcast slotframe
   tsch_schedule_add_link(sf_broadcast, LINK_OPTION_TX | LINK_OPTION_RX | LINK_OPTION_SHARED,
-                         LINK_TYPE_ADVERTISING, &tsch_broadcast_address, 0, 0, 1);
+                         LINK_TYPE_ADVERTISING, &tsch_broadcast_address, 0, 0, 0);
 
   // create one Tx link in the fisrt slot of the unicast slotframe (if this is a simple node, otherwise it will be Rx link)
   links_unicast_sf[0] = tsch_schedule_add_link(sf_unicast, LINK_OPTION_TX | LINK_OPTION_SHARED,
-                                                LINK_TYPE_NORMAL, &tsch_broadcast_address, 0, 0, 1);
+                                                LINK_TYPE_NORMAL, &tsch_broadcast_address, 0, 0, 0);
 
   // create multiple Rx links in the rest of the unicast slotframe
   for (int i = 1; i < UNICAST_SLOTFRAME_LENGTH; i++)
   {
     links_unicast_sf[i] = tsch_schedule_add_link(sf_unicast, LINK_OPTION_RX | LINK_OPTION_SHARED,
-                                                 LINK_TYPE_NORMAL, &tsch_broadcast_address, i, 0, 1);
+                                                 LINK_TYPE_NORMAL, &tsch_broadcast_address, i, 0, 0);
   }
 }
 
@@ -185,21 +186,6 @@ int my_callback_packet_ready(void)
   return 1;
 }
 
-//  Reset all the backoff times 
-// void reset_all_backoff_times(void)
-// {
-//   /* check if tsch is locked */
-//   if(!tsch_is_locked()) {
-//     struct tsch_neighbor *n = list_head(neighbor_list);
-//     while(n != NULL) {
-//       struct tsch_neighbor *next_n = list_item_next(n);
-//       /* Reset backoff exponent */
-//       tsch_queue_backoff_reset(n);
-//       n = next_n;
-//     }
-//   }
-// }
-
 // function to receive udp packets
 static void rx_packet(struct simple_udp_connection *c, const uip_ipaddr_t *sender_addr,
                       uint16_t sender_port, const uip_ipaddr_t *receiver_addr,
@@ -251,38 +237,38 @@ PROCESS_THREAD(node_udp_process, ev, data)
   schedule_setup = 1;
 
   // if this is a simple node, start sending upd packets
-  if (node_id != 1)
+  LOG_INFO("Started UDP communication\n");
+
+  // start the timer for periodic udp packet sending
+  etimer_set(&periodic_timer, SEND_INTERVAL);
+  
+  /* Main UDP comm Loop */
+  while (1)
   {
-    LOG_INFO("Started UDP communication\n");
+    // print the Q-values
+    LOG_INFO("Q-Values:");
+    for (uint8_t i = 0; i < UNICAST_SLOTFRAME_LENGTH; i++){
+      LOG_INFO_(" %u-> %f", i, q_values[i]);
+    }
+    LOG_INFO_("\n");
 
-    // start the timer for periodic udp packet sending
-    etimer_set(&periodic_timer, SEND_INTERVAL);
-    
-    /* Main UDP comm Loop */
-    while (1)
-    {
-      // print the Q-values
-      LOG_INFO("Q-Values:");
-      for (uint8_t i = 0; i < UNICAST_SLOTFRAME_LENGTH; i++){
-        LOG_INFO_(" %u->%f", i, q_values[i]);
-      }
-      LOG_INFO_("\n");
+    // print APT table values
+    LOG_INFO("APT-Values:");
+    uint8_t *table = get_apt_table();
+    for (uint8_t i = 0; i < UNICAST_SLOTFRAME_LENGTH; i++){
+      LOG_INFO_(" (%u->%u)", i, table[i]);
+    }
+    LOG_INFO_("\n");
+    LOG_INFO("Total frame cycles: %u\n", cycles_since_start);
 
-      // print APT table values
-      LOG_INFO("APT-Values:");
-      uint8_t *table = get_apt_table();
-      for (uint8_t i = 0; i < UNICAST_SLOTFRAME_LENGTH; i++){
-        LOG_INFO_(" %u->%u", i, table[i]);
-      }
-      LOG_INFO_("\n");
-      LOG_INFO("Total frame cycles: %u\n", cycles_since_start);
+    // reset all the backoff windows for all the neighbours
+    custom_reset_all_backoff_exponents();
+    // reset APT-table values
+    reset_apt_table();
 
-      // reset all the backoff windows for all the neighbours
-      //custom_reset_all_backoff_exponents();
-      // reset APT-table values
-      reset_apt_table();
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
 
-      PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
+    if (node_id != 1){
       if (NETSTACK_ROUTING.node_is_reachable() && NETSTACK_ROUTING.get_root_ipaddr(&dst))
       {
         /* Send custom payload to the network root node and increase the packet count number*/
@@ -292,8 +278,8 @@ PROCESS_THREAD(node_udp_process, ev, data)
         LOG_INFO_(", Packet Number %" PRIu32 "\n", seqnum);
         simple_udp_sendto(&udp_conn, &custom_payload, sizeof(custom_payload), &dst);
       }
-      etimer_set(&periodic_timer, SEND_INTERVAL);
     }
+    etimer_set(&periodic_timer, SEND_INTERVAL);
   }
   PROCESS_END();
 }
@@ -309,6 +295,7 @@ PROCESS_THREAD(scheduler_process, ev, data)
   
   // wait untill the initial setupt finishes
   while(1) if(schedule_setup) break;
+  LOG_INFO("Finished Setting up cycles: %u\n", cycles_since_start);
   
   // set the timer for one whole frame cycle 
   etimer_set(&policy_update_timer, UPDATE_POLICY_INTERVAL);
@@ -318,9 +305,12 @@ PROCESS_THREAD(scheduler_process, ev, data)
   { 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&policy_update_timer));
 
+#if WITH_TSCH_LOCKING
     // lock time-slotting before starting the first schedule
-    // while(1) if (tsch_get_lock() == 1) break;
+    while(1) if (tsch_get_lock() == 1) break;
+    // tsch_get_lock();
     // LOG_INFO("TSCH got locked -> WARNING !!!\n");
+#endif /* WITH_TSCH_LOCKING */
 
     /**********  Q-value update calculations - Start **********/
     
@@ -332,6 +322,7 @@ PROCESS_THREAD(scheduler_process, ev, data)
       } else {
         update_q_table(current_action, reward_failure);
       }
+      LOG_INFO("Updating the Q-table\n");
     }
     // LOG_INFO("Transmission status: %u\n", transmission_status);
     
@@ -344,15 +335,31 @@ PROCESS_THREAD(scheduler_process, ev, data)
       action = max_q_value_index();
       // LOG_INFO("Explotation is selected. Action is %u\n", action);
     }
+
+#if WITH_TSCH_LOCKING
+    // start the slot operations again and set the timer
+    tsch_release_lock();
+    // LOG_INFO("TSCH lock released -> WARNING !!!\n");
+#endif /* WITH_TSCH_LOCKING */
+
+    // set up a new schedule after releasing the TSCH lock
     set_up_new_schedule(action);
+
+    // set the timer again -> duration = (unicast + broadcast) slotframe cycle
+    while (1) if (!tsch_is_locked()) break;
+    etimer_set(&policy_update_timer, UPDATE_POLICY_INTERVAL);
+
     current_action = action;
     cycles_since_start++;
 
     /**********  Q-value update calculations - End **********/
 
-    // start the slot operations again and set the timer
-    // tsch_release_lock();
-    etimer_set(&policy_update_timer, UPDATE_POLICY_INTERVAL);
+// #if WITH_TSCH_LOCKING
+//     // start the slot operations again and set the timer
+//     tsch_release_lock();
+// #endif /* WITH_TSCH_LOCKING */
+
+    //etimer_set(&policy_update_timer, UPDATE_POLICY_INTERVAL);
   }
   PROCESS_END();
 }

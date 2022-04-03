@@ -33,7 +33,7 @@ PROCESS(scheduler_process, "QL-TSCH Scheduler Process");
 AUTOSTART_PROCESSES(&node_udp_process, &scheduler_process);
 
 // data to send to the server
-char custom_payload[UDP_PLAYLOAD_SIZE];
+unsigned char custom_payload[UDP_PLAYLOAD_SIZE];
 
 // Broadcast slotframe and Unicast slotframe
 struct tsch_slotframe *sf_broadcast;
@@ -49,8 +49,8 @@ uint8_t current_action = 0;
 float q_values[UNICAST_SLOTFRAME_LENGTH];
 
 // reward values
-int reward_succes = 0;
-int reward_failure = -1;
+int reward_succes = 1;
+int reward_failure = 0;
 
 // cycles since the beginning of the first slotframe
 uint16_t cycles_since_start = 0;
@@ -105,7 +105,7 @@ void set_up_new_schedule(uint8_t action)
 // function to populate the payload
 void create_payload()
 {
-  for (int i = 0; i < UDP_PLAYLOAD_SIZE; i++)
+  for (uint16_t i = 0; i < UDP_PLAYLOAD_SIZE; i++)
   {
     custom_payload[i] = i % 26 + 'a';
   }
@@ -193,9 +193,15 @@ static void rx_packet(struct simple_udp_connection *c, const uip_ipaddr_t *sende
 {
   char received_data[UDP_PLAYLOAD_SIZE];
   memcpy(received_data, data, datalen);
-  LOG_INFO("Received from ");
-  LOG_INFO_6ADDR(sender_addr);
-  LOG_INFO_("  data: %s\n", data);
+
+  uint16_t packet_num = 0;
+  packet_num = received_data[1] && 0xFF;
+  packet_num = (packet_num << 8) + (received_data[0] && 0xFF);
+
+  LOG_INFO("Received_from node: %d packet_num: %u\n", sender_addr->u8[15], packet_num);
+  // LOG_INFO_6ADDR(sender_addr);
+  // LOG_INFO_("node: %d\n", sender_addr->u8[15]);
+  // LOG_INFO_("  data: %s\n", data);
 }
 
 /********** UDP Communication Process - Start ***********/
@@ -204,7 +210,7 @@ PROCESS_THREAD(node_udp_process, ev, data)
   static struct simple_udp_connection udp_conn;
   static struct etimer periodic_timer;
 
-  static uint32_t seqnum;
+  static uint16_t seqnum;
   uip_ipaddr_t dst;
 
   PROCESS_BEGIN();
@@ -262,7 +268,7 @@ PROCESS_THREAD(node_udp_process, ev, data)
     LOG_INFO("Total frame cycles: %u\n", cycles_since_start);
 
     // reset all the backoff windows for all the neighbours
-    custom_reset_all_backoff_exponents();
+    // custom_reset_all_backoff_exponents();
     // reset APT-table values
     reset_apt_table();
 
@@ -271,12 +277,14 @@ PROCESS_THREAD(node_udp_process, ev, data)
     if (node_id != 1){
       if (NETSTACK_ROUTING.node_is_reachable() && NETSTACK_ROUTING.get_root_ipaddr(&dst))
       {
-        /* Send custom payload to the network root node and increase the packet count number*/
-        seqnum++;
-        LOG_INFO("Send to ");
+        /* Send the packet number to the root and extra data */
+        custom_payload[0] = seqnum && 0xFF;
+        custom_payload[1] = (seqnum >> 8) && 0xFF;
+        LOG_INFO("Send_to ");
         LOG_INFO_6ADDR(&dst);
-        LOG_INFO_(", Packet Number %" PRIu32 "\n", seqnum);
-        simple_udp_sendto(&udp_conn, &custom_payload, sizeof(custom_payload), &dst);
+        LOG_INFO_(" packet_number: %" PRIu32 "\n", seqnum);
+        simple_udp_sendto(&udp_conn, &custom_payload, UDP_PLAYLOAD_SIZE, &dst);
+        seqnum++;
       }
     }
     etimer_set(&periodic_timer, SEND_INTERVAL);
@@ -322,7 +330,7 @@ PROCESS_THREAD(scheduler_process, ev, data)
       } else {
         update_q_table(current_action, reward_failure);
       }
-      LOG_INFO("Updating the Q-table\n");
+      // LOG_INFO("Updating the Q-table\n");
     }
     // LOG_INFO("Transmission status: %u\n", transmission_status);
     
@@ -359,7 +367,6 @@ PROCESS_THREAD(scheduler_process, ev, data)
 //     tsch_release_lock();
 // #endif /* WITH_TSCH_LOCKING */
 
-    //etimer_set(&policy_update_timer, UPDATE_POLICY_INTERVAL);
   }
   PROCESS_END();
 }

@@ -56,14 +56,15 @@
 // drift compensation time when tsch locking is used in milliseconds
 #define EXTRA_TIME 78
 
-// define an interval policy update time, for testing
+// define an interval policy update time, for testing (fixed time to update Q-table)
+// not et the beginning of each slotframe
 #define UPDATE_POLICY_INTERVAL_CONF 0
 
 // Default slotframe length
 // #define TSCH_SCHEDULE_CONF_DEFAULT_LENGTH 7
 
-// Packet payload size
-#define PACKETBUF_CONF_SIZE 128 // 128 default
+// Packetbuffer size
+// #define PACKETBUF_CONF_SIZE 128 // 128 default
 
 // to list all the packets in the queue and get the total number
 // #define QUEUEBUF_CONF_DEBUG 1
@@ -89,6 +90,6 @@
 #define LOG_CONF_LEVEL_6LOWPAN LOG_LEVEL_WARN
 #define LOG_CONF_LEVEL_MAC LOG_LEVEL_WARN // alternative _INFO/WARN
 #define LOG_CONF_LEVEL_FRAMER LOG_LEVEL_WARN
-#define TSCH_LOG_CONF_PER_SLOT 0
+#define TSCH_LOG_CONF_PER_SLOT 1
 
 #endif /* PROJECT_CONF_H_ */

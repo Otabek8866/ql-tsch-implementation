@@ -105,10 +105,12 @@ void set_up_new_schedule(uint8_t action)
 // function to populate the payload
 void create_payload()
 {
-  for (uint16_t i = 0; i < UDP_PLAYLOAD_SIZE; i++)
+  for (uint16_t i = 4; i < UDP_PLAYLOAD_SIZE; i++)
   {
-    custom_payload[i] = i % 26 + 'a';
+    custom_payload[i] = i + 'a';
   }
+  custom_payload[2] = 0xFF;
+  custom_payload[3] = 0xFF;
 }
 
 // initialize q-values randomly or set all to 0
@@ -170,13 +172,18 @@ int my_callback_packet_ready(void)
   uint8_t channel_offset = 0;
   uint8_t timeslot = 0;
 
-  if (packetbuf_hdrlen() == UDP_HEADER_LEN)
+  char *ch = packetbuf_dataptr();
+  uint8_t f0 = ch[0] & 0xFF, f1 = ch[1] & 0xFF, f2 = ch[2] & 0xFF, f3 = ch[3] & 0xFF;
+  // LOG_INFO("Values: ch[0]: %d ch[1]: %d  ch[2]: %d  ch[3]: %d\n", ch[0] & 0xFF, ch[1] & 0xFF, ch[2] & 0xFF, ch[3] & 0xFF);
+  if (f0 == 126 && f1 == 247 && f2 == 0 && f3 == 225)
   {
     timeslot = current_action;
     slotframe = 1;
-    LOG_INFO("Current Packet is a UDP packet\n");
+    // LOG_INFO("Current Packet is a UDP packet\n");
   }
-  LOG_INFO("Packet header length: %u\n", packetbuf_hdrlen());
+  // LOG_INFO("Packet header length: %u\n", packetbuf_hdrlen());
+  // LOG_INFO("Packet data length: %u\n", packetbuf_datalen());
+
 #if TSCH_WITH_LINK_SELECTOR
   packetbuf_set_attr(PACKETBUF_ATTR_TSCH_SLOTFRAME, slotframe);
   packetbuf_set_attr(PACKETBUF_ATTR_TSCH_TIMESLOT, timeslot);
@@ -194,11 +201,11 @@ static void rx_packet(struct simple_udp_connection *c, const uip_ipaddr_t *sende
   char received_data[UDP_PLAYLOAD_SIZE];
   memcpy(received_data, data, datalen);
 
-  uint16_t packet_num = 0;
-  packet_num = received_data[1] && 0xFF;
-  packet_num = (packet_num << 8) + (received_data[0] && 0xFF);
+  uint16_t packet_num;
+  packet_num = received_data[1] & 0xFF;
+  packet_num = (packet_num << 8) + (received_data[0] & 0xFF);
 
-  LOG_INFO("Received_from node: %d packet_num: %u\n", sender_addr->u8[15], packet_num);
+  LOG_INFO("Received_from %d packet_number: %d\n", sender_addr->u8[15], packet_num);
   // LOG_INFO_6ADDR(sender_addr);
   // LOG_INFO_("node: %d\n", sender_addr->u8[15]);
   // LOG_INFO_("  data: %s\n", data);
@@ -278,11 +285,11 @@ PROCESS_THREAD(node_udp_process, ev, data)
       if (NETSTACK_ROUTING.node_is_reachable() && NETSTACK_ROUTING.get_root_ipaddr(&dst))
       {
         /* Send the packet number to the root and extra data */
-        custom_payload[0] = seqnum && 0xFF;
-        custom_payload[1] = (seqnum >> 8) && 0xFF;
-        LOG_INFO("Send_to ");
-        LOG_INFO_6ADDR(&dst);
-        LOG_INFO_(" packet_number: %" PRIu32 "\n", seqnum);
+        custom_payload[0] = seqnum & 0xFF;
+        custom_payload[1] = (seqnum >> 8) & 0xFF;
+        LOG_INFO("Sent_to %d packet_number: %d\n", dst.u8[15], seqnum);
+        // LOG_INFO_6ADDR(&dst);
+        // LOG_INFO_(" packet_number: %d\n", seqnum);
         simple_udp_sendto(&udp_conn, &custom_payload, UDP_PLAYLOAD_SIZE, &dst);
         seqnum++;
       }

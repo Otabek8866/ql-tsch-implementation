@@ -3,7 +3,7 @@
 int main()
 {
     unsigned char ch[2];
-    unsigned int i = 6025;
+    unsigned int i = 1;
     ch[0] = i & 0xff;
     ch[1] = (i >> 8) & 0xff;
     printf("%d %d\n", ch[0], ch[1]);

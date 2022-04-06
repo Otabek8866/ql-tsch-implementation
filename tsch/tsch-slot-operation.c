@@ -189,17 +189,25 @@ static PT_THREAD(tsch_rx_slot(struct pt *pt, struct rtimer *t));
 #if QL_TSCH_ENABLED
 
 // record Tx slot status 
-uint8_t trans_status = 0;
+uint8_t trans_status[2] = {0, 0};
 
 // array to store APT table
 uint8_t apt_table[UNICAST_SLOTFRAME_LENGTH];
 
 // reset the values of APT table when requested
-void reset_apt_table()
+void update_apt_table(float a)
 {
   for (uint8_t i = 0; i < UNICAST_SLOTFRAME_LENGTH; i++)
   {
-    apt_table[i] = 0;
+    apt_table[i] = apt_table[i] * a;
+  }
+}
+
+// set all the APT values to 0s at the beginning
+void set_apt_values(void) {
+  for (uint8_t i = 0; i < UNICAST_SLOTFRAME_LENGTH; i++)
+  {
+    apt_table[i] = apt_table[i];
   }
 }
 
@@ -221,12 +229,10 @@ uint8_t get_slot_with_apt_table_min_value()
   return min;
 }
 
-// reset Tx slot status to 0
-uint8_t get_and_reset_Tx_slot_status()
+// get Tx transmission status
+uint8_t * get_Tx_slot_status()
 {
-  uint8_t tmp = trans_status;
-  trans_status = 0;
-  return tmp;
+  return trans_status;
 }
 #endif /* QL_TSCH_ENABLED */
 
@@ -854,11 +860,13 @@ PT_THREAD(tsch_tx_slot(struct pt *pt, struct rtimer *t))
   if(current_link->slotframe_handle == 1) {
     if (mac_tx_status == MAC_TX_OK)
     {
-      trans_status = 1;
-    } else /*if (mac_tx_status == MAC_TX_COLLISION || mac_tx_status == MAC_TX_NOACK ||
-              mac_tx_status == MAC_TX_ERR_FATAL || mac_tx_status == MAC_TX_ERR) */
+      trans_status[0] = 1;
+      trans_status[1] = current_link->timeslot;
+    } else if (mac_tx_status == MAC_TX_COLLISION || mac_tx_status == MAC_TX_NOACK ||
+              mac_tx_status == MAC_TX_ERR_FATAL || mac_tx_status == MAC_TX_ERR)
     {
-      trans_status = 2;
+      trans_status[0] = 2;
+      trans_status[1] = current_link->timeslot;
     }
   }
 #endif /* QL_TSCH_ENABLED */

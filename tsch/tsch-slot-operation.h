@@ -113,20 +113,22 @@ void unlock_queue_rx();
 void lock_queue_rx();
 // #endif /* RL_TSCH_ENABLED */
 
-// #if QL_TSCH_ENABLED
-// reset the values of APT table when requested
-void reset_apt_table();
+// #if QL_TSCH_ENABLED  --------------------------------------------------
+// update the values of APT table when a number
+void update_apt_table(float a);
 
 // return apt table
 uint8_t * get_apt_table();
 
+// set all the APT values to 0s at the beginning
+void set_apt_values(void);
+
 // function to return a slot number with the lowest value
 uint8_t get_slot_with_apt_table_min_value();
 
-// reset Tx slot status to 0
-uint8_t get_and_reset_Tx_slot_status();
-
-// #endif /* QL_TSCH_ENABLED */
+// get Tx transmission status
+uint8_t * get_Tx_slot_status();
+// #endif /* QL_TSCH_ENABLED */  -----------------------------------------
 
 /**************************** My modifications - End **********************************/
 

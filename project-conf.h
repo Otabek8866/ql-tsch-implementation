@@ -34,9 +34,6 @@
 // UDP packet payload size
 #define UDP_PLAYLOAD_SIZE 50
 
-// expected header lenght of a UDP packet from Application layer
-#define UDP_HEADER_LEN 21
-
 // MAX number of re-transmissions
 #define TSCH_CONF_MAX_FRAME_RETRIES 3
 
@@ -51,24 +48,19 @@
 #define QL_TSCH_ENABLED_CONF 1
 
 // Run algorithm with tsch locking
-#define WITH_TSCH_LOCKING 1
+#define WITH_TSCH_LOCKING 0
 
-// drift compensation time when tsch locking is used in milliseconds
-#define EXTRA_TIME 78
+// Random Q-values or 0s (at the beginning)
+#define RANDOM_Q_VALUES 1
 
-// define an interval policy update time, for testing (fixed time to update Q-table)
-// not et the beginning of each slotframe
-#define UPDATE_POLICY_INTERVAL_CONF 0
+// print Q-values and APT values
+#define PRINT_Q_VALUES_AND_APT 1
 
 // Default slotframe length
 // #define TSCH_SCHEDULE_CONF_DEFAULT_LENGTH 7
 
 // Packetbuffer size
 // #define PACKETBUF_CONF_SIZE 128 // 128 default
-
-// to list all the packets in the queue and get the total number
-// #define QUEUEBUF_CONF_DEBUG 1
-// #define QUEUEBUF_CONF_STATS 1
 
 // The 6lowpan "headers" length
 // #define TSCH_CONF_WITH_SIXTOP 1

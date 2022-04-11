@@ -64,7 +64,7 @@ def main():
             print("Node {}: {:.2f} ms".format(i, sum(delays[i][0])/len(delays[i][0])))
         else:
             print("No packet received -> No Delay")
-        print("Packet IDs not received: {}".format(delays[i][1]))
+        print("Packet_IDs (not received): {}".format(delays[i][1]))
         print("Packet Delivery Ratio: {:.2f}%".format(delays[i][2]))
         print('-' * 50)
 

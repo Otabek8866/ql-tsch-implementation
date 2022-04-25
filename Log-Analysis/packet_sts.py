@@ -63,10 +63,12 @@ def main():
         if len(delays[i][0]) != 0:
             print("Node {}: {:.2f} ms".format(i, sum(delays[i][0])/len(delays[i][0])))
         else:
-            print("No packet received -> No Delay")
-        print("Packet_IDs (not received): {}".format(delays[i][1]))
+            print("Node {}: No packet received -> No Delay".format(i))
+        print("Packet IDs not received: {}".format(delays[i][1]))
         print("Packet Delivery Ratio: {:.2f}%".format(delays[i][2]))
         print('-' * 50)
+    print("Number of Active Nodes:", len(pkt_sent))
+    print("Active nodes:", sorted(pkt_sent.keys()))
 
 
 if __name__ == "__main__":
